@@ -2,6 +2,7 @@ set(source_files
     helper/cbr-helper.cc
     helper/client-rx-trace-plot.cc
     helper/nrtv-helper.cc
+    helper/ntn-real-stack-helper.cc
     helper/three-gpp-http-satellite-helper.cc
     model/cbr-application.cc
     model/nrtv-header.cc
@@ -10,6 +11,14 @@ set(source_files
     model/nrtv-udp-server.cc
     model/nrtv-variables.cc
     model/nrtv-video-worker.cc
+    model/ntn-oran-ai-flow-monitor.cc
+    model/ntn-oran-application.cc
+    model/ntn-oran-payload-header.cc
+    model/ntn-oran-sink.cc
+    model/ntn-sat-beam-gain-model.cc
+    model/ntn-spectrum-seam-model.cc
+    model/ntn-tdl-spectrum-loss-model.cc
+    model/ntn-tr38811-excess-loss-model.cc
     model/traffic-time-tag.cc
     model/three-gpp-http-satellite-client.cc
     stats/application-stats-helper.cc
@@ -23,6 +32,7 @@ set(header_files
     helper/client-rx-trace-plot.h
     helper/histogram-plot-helper.h
     helper/nrtv-helper.h
+    helper/ntn-real-stack-helper.h
     helper/three-gpp-http-satellite-helper.h
     model/traffic.h
     model/cbr-application.h
@@ -32,6 +42,14 @@ set(header_files
     model/nrtv-udp-server.h
     model/nrtv-variables.h
     model/nrtv-video-worker.h
+    model/ntn-oran-ai-flow-monitor.h
+    model/ntn-oran-application.h
+    model/ntn-oran-payload-header.h
+    model/ntn-oran-sink.h
+    model/ntn-sat-beam-gain-model.h
+    model/ntn-spectrum-seam-model.h
+    model/ntn-tdl-spectrum-loss-model.h
+    model/ntn-tr38811-excess-loss-model.h
     model/traffic-time-tag.h
     model/three-gpp-http-satellite-client.h
     stats/application-stats-helper.h
@@ -43,6 +61,8 @@ set(header_files
 set(test_sources
     test/cbr-test.cc
     test/nrtv-test.cc
+    test/ntn-real-stack-helper-test.cc
+    test/ntn-spectrum-seam-test.cc
 )
 
 build_lib(
