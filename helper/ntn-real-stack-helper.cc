@@ -74,8 +74,8 @@ NS_LOG_COMPONENT_DEFINE("NtnRealStackHelper");
 namespace
 {
 // Map a 5QI to the BwpManagerAlgorithmStatic attribute that routes that QCI to a
-// BWP index (Enabler C). The NrEpsBearer::Qci enum value IS the 5QI number, and
-// each Qci has a same-named "route to BWP" attribute on the static BWP manager.
+// BWP index (Enabler C). The NrQosFlow::FiveQi enum value IS the 5QI number, and
+// each 5QI has a same-named "route to BWP" attribute on the static BWP manager.
 // Returns "" for a 5QI without a dedicated routing attribute (falls back to BWP 0).
 std::string
 QciAttrName(uint8_t fiveQi)
@@ -612,10 +612,7 @@ NtnRealStackHelper::BuildNrRadio()
     // ---- Enabler C: one BWP per slice (default 1 BWP) --------------------
     const uint8_t nBwp = static_cast<uint8_t>(std::max<size_t>(1, m_slices.size()));
     CcBwpCreator ccBwpCreator;
-    CcBwpCreator::SimpleOperationBandConf bandConf(m_freqHz,
-                                                   m_bwHz,
-                                                   nBwp,
-                                                   BandwidthPartInfo::UMi_StreetCanyon);
+    CcBwpCreator::SimpleOperationBandConf bandConf(m_freqHz, m_bwHz, nBwp);
     OperationBandInfo band = ccBwpCreator.CreateOperationBandContiguousCc(bandConf);
 
     // NT-08. ThreeGppChannelModel gates cluster regeneration on
@@ -634,8 +631,31 @@ NtnRealStackHelper::BuildNrRadio()
     // A scenario that genuinely wants a frozen channel can still ask for 0.
     Config::SetDefault("ns3::ThreeGppChannelModel::UpdatePeriod",
                        TimeValue(m_channelUpdatePeriod));
-    m_nr->SetChannelConditionModelAttribute("UpdatePeriod",
-                                            TimeValue(m_channelUpdatePeriod));
+    // New-API channel setup (5G-LENA v4+/v5): NrChannelHelper owns the
+    // per-BWP 3GPP spatial channel, created by AssignChannelsToBands below.
+    auto nrChannelHelper = CreateObject<NrChannelHelper>();
+    // NTN geometry is always line-of-sight: a service link to a satellite
+    // above the minimum elevation is LOS by construction
+    // (TR 38.811 Table 6.6.2-x, LOS probability -> 1 at high elevation).
+    // "NTN-Rural" selects the 3GPP NTN-Rural pathloss + channel-condition
+    // pair (NrChannelHelper Scenario enum) instead of the old UMi-StreetCanyon
+    // terrestrial tables, whose ENU height/2D split collapses at LEO range.
+    nrChannelHelper->ConfigureFactories("NTN-Rural", "LOS", "ThreeGpp");
+    // NOTE: no SetChannelConditionModelAttribute("UpdatePeriod") here.
+    // "LOS" selects AlwaysLosChannelConditionModel, which carries no
+    // UpdatePeriod attribute (nothing to refresh on an always-LOS model),
+    // so forwarding the period would abort at channel creation. Cluster
+    // regeneration is still governed by the ThreeGppChannelModel::UpdatePeriod
+    // default above (NT-08).
+    // 3GPP spatial-channel shadowing off: large-scale loss on this backend is
+    // the per-BWP Friis head the NTN excess-loss chain attaches to below (the
+    // old code wrote this through the removed NrHelper::SetPathlossAttribute
+    // onto a UMi-StreetCanyon loss that no longer exists).
+    nrChannelHelper->SetPathlossAttribute("ShadowingEnabled", BooleanValue(false));
+    // Friis large-scale heads are NOT pre-attached to the BWP structs anymore:
+    // BandwidthPartInfo in this 5G-LENA carries only a private SpectrumChannel
+    // (SetChannel/GetChannel) and AssignChannelsToBands fills it, so the Friis
+    // instances below are chained onto each assigned channel afterwards.
     // A9. SRS configuration indices, not spectrum, are what caps how many UEs a
     // gNB can admit. NrGnbRrc::SrsPeriodicity defaults to 40 and the toolkit
     // never set it, so DoAllocateTemporaryCellRnti started returning 0 once the
@@ -682,11 +702,9 @@ NtnRealStackHelper::BuildNrRadio()
         NS_LOG_INFO("NtnRealStackHelper: TDD pattern " << m_tddPattern);
     }
 
-    m_nr->SetPathlossAttribute("ShadowingEnabled", BooleanValue(false));
-
     // Friis large-scale loss on EVERY BWP (frame-independent, valid at LEO
-    // range); InitializeOperationBand keeps the 3GPP spatial model for array
-    // gain.
+    // range); the 3GPP NTN-Rural spatial model from AssignChannelsToBands
+    // below supplies the array gain / fading.
     //
     // GAP S5 FIX: keep a per-BWP Friis head (not just CC0's). The NTN excess
     // loss / beam / caller-supplied chains attach to these heads; storing only
@@ -694,6 +712,7 @@ NtnRealStackHelper::BuildNrRadio()
     // no atmosphere, scintillation, shadowing or beam roll-off — biasing exactly
     // the per-slice SINR comparison the slicing feature exists to measure.
     m_nrBaseLossPerBwp.assign(nBwp, nullptr);
+    nrChannelHelper->AssignChannelsToBands({band});
     for (uint8_t cc = 0; cc < nBwp; ++cc)
     {
         BandwidthPartInfoPtr& bwp = band.GetBwpAt(cc, 0);
@@ -702,7 +721,12 @@ NtnRealStackHelper::BuildNrRadio()
         // all of them mis-scales Friis across a wide multi-BWP band.
         const double bwpFreqHz = (bwp->m_centralFrequency > 0.0) ? bwp->m_centralFrequency : m_freqHz;
         friis->SetAttribute("Frequency", DoubleValue(bwpFreqHz));
-        bwp->m_propagation = friis;
+        // Prepend ahead of the 3GPP NTN-Rural loss AssignChannelsToBands
+        // installed: SpectrumChannel::AddPropagationLossModel chains the new
+        // head before the existing model.
+        Ptr<SpectrumChannel> bwpChannel = bwp->GetChannel();
+        NS_ABORT_MSG_IF(!bwpChannel, "NrChannelHelper left BWP without a spectrum channel");
+        bwpChannel->AddPropagationLossModel(friis);
         m_nrBaseLossPerBwp[cc] = friis;
         if (cc == 0)
         {
@@ -710,35 +734,14 @@ NtnRealStackHelper::BuildNrRadio()
         }
     }
 
-    m_nr->InitializeOperationBand(&band);
-
     // ---- GAP S4 FIX: NTN geometry is always line-of-sight ------------------
-    // InitializeOperationBand attaches a UMi-StreetCanyon *probabilistic*
-    // channel-condition model (the scenario enum above only selects a parameter
-    // set; 5G-LENA has no NTN scenario in v3.3). Evaluated on ECEF coordinates a
-    // LEO link has d2D of hundreds-to-thousands of km, so the UMi LOS formula
-    // returns NLOS essentially always, and the fading draw then comes from UMi
-    // NLOS cluster tables with "antenna heights" of ~6.37e6 m. That is not
-    // TR 38.811 §6.7 NTN fading in any sense, and it is why the nr backend
-    // needed a physically impossible EIRP to close the link.
-    //
-    // A service link to a satellite above the minimum elevation is LOS by
-    // construction (TR 38.811 §6.6.1: LOS probability -> 1 at high elevation;
-    // the toolkit gates candidates on elevation anyway). Force it, mirroring
-    // what the mmwave backend already does, until a real TR 38.811 NTN-TDL
-    // spectrum model exists.
-    for (uint8_t cc = 0; cc < nBwp; ++cc)
-    {
-        BandwidthPartInfoPtr& bwp = band.GetBwpAt(cc, 0);
-        Ptr<ThreeGppSpectrumPropagationLossModel> sp =
-            DynamicCast<ThreeGppSpectrumPropagationLossModel>(bwp->m_3gppChannel);
-        if (sp)
-        {
-            sp->SetChannelModelAttribute(
-                "ChannelConditionModel",
-                PointerValue(CreateObject<AlwaysLosChannelConditionModel>()));
-        }
-    }
+    // Covered by ConfigureFactories("NTN-Rural", "LOS", "ThreeGpp") above: the
+    // "LOS" condition selects AlwaysLosChannelConditionModel on every BWP, so
+    // there is no probabilistic terrestrial condition left to override here.
+    // The old UMi-StreetCanyon tables are gone because their ENU height/2D
+    // split collapses at LEO range (d2D of hundreds-to-thousands of km reads
+    // NLOS essentially always, and the fading draw then comes from UMi NLOS
+    // cluster tables with "antenna heights" of ~6.37e6 m).
 
     // ---- GAP S2 FIX: real propagation delay on the air interface -----------
     // 5G-LENA creates each BWP SpectrumChannel with loss models only, so
@@ -776,7 +779,7 @@ NtnRealStackHelper::BuildNrRadio()
         for (uint8_t cc = 0; cc < nBwp; ++cc)
         {
             BandwidthPartInfoPtr& bwp = band.GetBwpAt(cc, 0);
-            Ptr<SpectrumChannel> ch = bwp->m_channel;
+            Ptr<SpectrumChannel> ch = bwp->GetChannel();
             if (ch && !ch->GetPropagationDelayModel())
             {
                 ch->SetPropagationDelayModel(CreateObject<ConstantSpeedPropagationDelayModel>());
@@ -809,7 +812,7 @@ NtnRealStackHelper::BuildNrRadio()
     m_nrBwpChannels.clear();
     for (const auto& bwp : allBwps)
     {
-        m_nrBwpChannels.push_back(bwp.get()->m_channel);
+        m_nrBwpChannels.push_back(bwp.get()->GetChannel());
     }
     // Per-BWP RB count (for the measured PRB-utilisation fraction). SCS grows
     // with numerology; each BWP carries m_bwHz/nBwp of the band.
@@ -1719,13 +1722,17 @@ NtnRealStackHelper::InstallOranFlow(uint32_t ueIdx,
         (!m_slices.empty() || m_scheduler == Scheduler::OfdmaQos);
     if (perQosBearers && !QciAttrName(fiveQi).empty())
     {
-        NrEpsBearer bearer(static_cast<NrEpsBearer::Qci>(fiveQi));
-        Ptr<NrEpcTft> tft = Create<NrEpcTft>();
-        NrEpcTft::PacketFilter pf;
+        // Dedicated 5QI QoS flow (5G-LENA NrQosFlow/NrQosRule API -
+        // cttc-nr-simple-qos-sched.cc recipe): the FiveQi enum value IS the
+        // 5QI number, and the packet filter routes this flow's DL port onto
+        // the flow so the QoS scheduler / BWP manager can differentiate it.
+        NrQosFlow flow(static_cast<NrQosFlow::FiveQi>(fiveQi));
+        Ptr<NrQosRule> rule = Create<NrQosRule>();
+        NrQosRule::PacketFilter pf;
         pf.localPortStart = dlPort;
         pf.localPortEnd = dlPort;
-        tft->Add(pf);
-        m_nr->ActivateDedicatedEpsBearer(m_ueDevs.Get(ueIdx), bearer, tft);
+        rule->Add(pf);
+        m_nr->ActivateDedicatedQosFlow(m_ueDevs.Get(ueIdx), flow, rule);
     }
 
     sink->SetStartTime(Seconds(0.0));
