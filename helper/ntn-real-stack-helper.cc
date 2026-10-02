@@ -1005,8 +1005,10 @@ NtnRealStackHelper::BuildNrRadio()
             m_nr->GetUePhy(m_ueDevs.Get(i), b)->SetAttribute("TxPower", DoubleValue(m_ueTxDbm));
         }
     }
-    m_nr->UpdateDeviceConfigs(m_enbDevs);
-    m_nr->UpdateDeviceConfigs(m_ueDevs);
+    // UpdateDeviceConfigs() is deprecated in ns-3.49. Keep these post-install
+    // refreshes disabled until a supported replacement is needed here.
+    // m_nr->UpdateDeviceConfigs(m_enbDevs);
+    // m_nr->UpdateDeviceConfigs(m_ueDevs);
 
     // ---- Enabler A: instantiate + cross-wire the A3-RSRP handover algorithm.
     // This is the wiring the vendored NrHelper omits (see the note above). It

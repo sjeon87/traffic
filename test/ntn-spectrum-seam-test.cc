@@ -130,7 +130,7 @@ class NtnSpectrumSeamComposeTest : public TestCase
         // Case 1: no inner, one halving plugin -> PSD halved.
         {
             Ptr<NtnSpectrumSeamModel> seam = CreateObject<NtnSpectrumSeamModel>();
-            seam->AddPlugin(Create<ScalingPlugin>(0.5));
+            seam->AddPlugin(CreateObject<ScalingPlugin>(0.5));
             NS_TEST_ASSERT_MSG_EQ(seam->GetNumPlugins(), 1u, "plugin registered");
             auto rx = seam->CalcRxPowerSpectralDensity(MakeParams(100.0), a, b, arr, arr);
             NS_TEST_ASSERT_MSG_EQ_TOL((*rx->psd)[0], 50.0, 1e-9,
@@ -143,8 +143,8 @@ class NtnSpectrumSeamComposeTest : public TestCase
         // bug this test guards.)
         {
             Ptr<NtnSpectrumSeamModel> seam = CreateObject<NtnSpectrumSeamModel>();
-            seam->SetInnerModel(Create<ScalingPhasedInner>(2.0));
-            seam->AddPlugin(Create<ScalingPlugin>(0.5));
+            seam->SetInnerModel(CreateObject<ScalingPhasedInner>(2.0));
+            seam->AddPlugin(CreateObject<ScalingPlugin>(0.5));
             auto rx = seam->CalcRxPowerSpectralDensity(MakeParams(100.0), a, b, arr, arr);
             NS_TEST_ASSERT_MSG_EQ_TOL(
                 (*rx->psd)[0], 100.0, 1e-9,
@@ -154,7 +154,7 @@ class NtnSpectrumSeamComposeTest : public TestCase
         // Case 3: inner alone (no plugin) passes through unchanged (x2).
         {
             Ptr<NtnSpectrumSeamModel> seam = CreateObject<NtnSpectrumSeamModel>();
-            seam->SetInnerModel(Create<ScalingPhasedInner>(2.0));
+            seam->SetInnerModel(CreateObject<ScalingPhasedInner>(2.0));
             auto rx = seam->CalcRxPowerSpectralDensity(MakeParams(100.0), a, b, arr, arr);
             NS_TEST_ASSERT_MSG_EQ_TOL((*rx->psd)[0], 200.0, 1e-9,
                                       "with no plugin the inner 3GPP channel is untouched");
