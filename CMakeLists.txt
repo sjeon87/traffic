@@ -78,8 +78,21 @@ build_lib(
   HEADER_FILES ${header_files}
   LIBRARIES_TO_LINK
     ${libcore}
+    ${libnetwork}
+    ${libmobility}
+    ${libpropagation}
+    ${libspectrum}
+    ${libantenna}
+    ${libbuildings}
+    ${libinternet}
     ${libapplications}
     ${libflow-monitor}
+    ${libconfig-store}
+    ${liblte}
+    ${libnr}
+    ${libmmwave}
+    ${libntn-rrc}
+    ${libntn-observability}
     ${libmagister-stats}
     ${libpoint-to-point}
   TEST_SOURCES ${test_sources}

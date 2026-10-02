@@ -23,7 +23,7 @@
 //         DRB.PdcpSduVolumeDl, and (when attached to NtnRealStackHelper)
 //         L1M.RS-SINR, TB.TotNbrDl, TB.ErrTotNbrDl from the PHY trace;
 //       - sliding-window AI feature vectors per flow (mean/slope of
-//         throughput, delay, loss, SINR) for xApps / ns3-ai-ntn / ONNX;
+//         throughput, delay, loss, SINR) for xApps / ns3-ai / ONNX;
 //       - EWMA z-score anomaly detector per flow per metric raising events
 //         (the paper's zero-touch self-protection hook);
 //       - exporters: FlowMonitor XML, CSV, InfluxDB line protocol, and
