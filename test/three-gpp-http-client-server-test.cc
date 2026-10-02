@@ -313,7 +313,7 @@ ThreeGppHttpObjectTestCase::ThreeGppHttpObjectTestCase(const std::string& name,
 
     m_errorModel = CreateObject<RateErrorModel>();
     m_errorModel->SetRate(bitErrorRate);
-    m_errorModel->SetUnit(RateErrorModel::ERROR_Type::UNIT_BIT);
+    m_errorModel->SetUnit(RateErrorModel::ERROR_UNIT_BIT);
 
     m_ipv4AddressHelper.SetBase(Ipv4Address("10.0.0.0"),
                                 Ipv4Mask("255.0.0.0"),
@@ -407,7 +407,7 @@ ThreeGppHttpObjectTestCase::DoRun()
                           1,
                           "Invalid number of HTTP servers has been installed");
     Ptr<ThreeGppHttpServer> httpServer = serverApplications.Get(0)->GetObject<ThreeGppHttpServer>();
-    NS_TEST_ASSERT_MSG_NE(httpServer, 0, "HTTP server installation fails to produce a proper type");
+    NS_TEST_ASSERT_MSG_NE(httpServer, nullptr, "HTTP server installation fails to produce a proper type");
     httpServer->SetMtuSize(m_mtuSize);
 
     // Client node.
@@ -419,7 +419,7 @@ ThreeGppHttpObjectTestCase::DoRun()
                           1,
                           "Invalid number of HTTP clients has been installed");
     Ptr<ThreeGppHttpClient> httpClient = clientApplications.Get(0)->GetObject<ThreeGppHttpClient>();
-    NS_TEST_ASSERT_MSG_NE(httpClient, 0, "HTTP client installation fails to produce a proper type");
+    NS_TEST_ASSERT_MSG_NE(httpClient, nullptr, "HTTP client installation fails to produce a proper type");
 
     // Uplink (requests) trace sources.
     bool traceSourceConnected = httpClient->TraceConnectWithoutContext(
@@ -866,14 +866,14 @@ class ThreeGppHttpClientServerTestSuite : public TestSuite
         }
 
         // Assign higher fullness for tests with higher RngRun.
-        TestCase::TestDuration testDuration = TestCase::Duration::QUICK;
+        TestCase::Duration testDuration = TestCase::Duration::QUICK;
         if (rngRun > 20)
         {
-            testDuration = TestCase::EXTENSIVE;
+            testDuration = TestCase::Duration::EXTENSIVE;
         }
         if (rngRun > 50)
         {
-            testDuration = TestCase::TAKES_FOREVER;
+            testDuration = TestCase::Duration::TAKES_FOREVER;
         }
 
         AddTestCase(new ThreeGppHttpObjectTestCase(name.str(),

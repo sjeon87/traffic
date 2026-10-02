@@ -11,16 +11,19 @@ set(source_files
     model/nrtv-udp-server.cc
     model/nrtv-variables.cc
     model/nrtv-video-worker.cc
+    model/ntn-command-and-control-app.cc
     model/ntn-oran-ai-flow-monitor.cc
     model/ntn-oran-application.cc
     model/ntn-oran-payload-header.cc
     model/ntn-oran-sink.cc
     model/ntn-sat-beam-gain-model.cc
     model/ntn-spectrum-seam-model.cc
+    model/ntn-static-extra-loss-model.cc
     model/ntn-tdl-spectrum-loss-model.cc
     model/ntn-tr38811-excess-loss-model.cc
     model/traffic-time-tag.cc
     model/three-gpp-http-satellite-client.cc
+    model/three-gpp-http-variables.cc
     stats/application-stats-helper.cc
     stats/application-stats-delay-helper.cc
     stats/application-stats-throughput-helper.cc
@@ -42,16 +45,19 @@ set(header_files
     model/nrtv-udp-server.h
     model/nrtv-variables.h
     model/nrtv-video-worker.h
+    model/ntn-command-and-control-app.h
     model/ntn-oran-ai-flow-monitor.h
     model/ntn-oran-application.h
     model/ntn-oran-payload-header.h
     model/ntn-oran-sink.h
     model/ntn-sat-beam-gain-model.h
     model/ntn-spectrum-seam-model.h
+    model/ntn-static-extra-loss-model.h
     model/ntn-tdl-spectrum-loss-model.h
     model/ntn-tr38811-excess-loss-model.h
     model/traffic-time-tag.h
     model/three-gpp-http-satellite-client.h
+    model/three-gpp-http-variables.h
     stats/application-stats-helper.h
     stats/application-stats-delay-helper.h
     stats/application-stats-throughput-helper.h
@@ -63,6 +69,7 @@ set(test_sources
     test/nrtv-test.cc
     test/ntn-real-stack-helper-test.cc
     test/ntn-spectrum-seam-test.cc
+    test/three-gpp-http-client-server-test.cc
 )
 
 build_lib(
