@@ -27,6 +27,7 @@
 #include "ns3/object.h"
 #include "ns3/ptr.h"
 
+#include <cstdint>
 #include <string>
 
 namespace ns3
@@ -122,7 +123,7 @@ class ClientRxTracePlot : public Object
     Ptr<Application> m_client; ///< The currently active client application.
     std::string m_outputName;  ///< The name of the plot file.
     Gnuplot2dDataset m_packet; ///< Size of every packet received.
-    u_int32_t m_counter;
+    uint32_t m_counter;
 
 }; // end of `class ClientRxTracePlot`
 
