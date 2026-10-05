@@ -23,7 +23,6 @@ set(source_files
     model/ntn-tr38811-excess-loss-model.cc
     model/traffic-time-tag.cc
     model/three-gpp-http-satellite-client.cc
-    model/three-gpp-http-variables.cc
     stats/application-stats-helper.cc
     stats/application-stats-delay-helper.cc
     stats/application-stats-throughput-helper.cc
@@ -57,7 +56,6 @@ set(header_files
     model/ntn-tr38811-excess-loss-model.h
     model/traffic-time-tag.h
     model/three-gpp-http-satellite-client.h
-    model/three-gpp-http-variables.h
     stats/application-stats-helper.h
     stats/application-stats-delay-helper.h
     stats/application-stats-throughput-helper.h
@@ -69,7 +67,6 @@ set(test_sources
     test/nrtv-test.cc
     test/ntn-real-stack-helper-test.cc
     test/ntn-spectrum-seam-test.cc
-    test/three-gpp-http-client-server-test.cc
 )
 
 build_lib(

@@ -21,7 +21,7 @@
 
 #include "three-gpp-http-satellite-client.h"
 
-#include "three-gpp-http-variables.h"
+#include "ns3/three-gpp-http-variables.h"
 
 #include "ns3/callback.h"
 #include "ns3/double.h"

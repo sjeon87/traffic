@@ -25,8 +25,9 @@
 #include "ns3/application-container.h"
 #include "ns3/boolean.h"
 #include "ns3/config.h"
-#include "ns3/constant-position-mobility-model.h"
-#include "ns3/constant-velocity-mobility-model.h"
+#include "ns3/constant-velocity-helper.h"
+#include "ns3/geocentric-constant-position-mobility-model.h"
+#include "ns3/geographic-positions.h"
 #include "ns3/node-container.h"
 #include "ns3/ntn-oran-ai-flow-monitor.h"
 #include "ns3/ntn-oran-application.h"
@@ -67,6 +68,75 @@ using namespace ns3;
 
 namespace
 {
+
+/**
+ * Constant-velocity test mobility in a local frame with geocentric coordinates
+ * for the NTN channel models.
+ * @ingroup tests
+ */
+class RealStackTestMobilityModel : public GeocentricConstantPositionMobilityModel
+{
+  public:
+    /**
+     * @return The test mobility TypeId.
+     */
+    static TypeId GetTypeId()
+    {
+        static TypeId tid = TypeId("ns3::RealStackTestMobilityModel")
+                                .SetParent<GeocentricConstantPositionMobilityModel>()
+                                .AddConstructor<RealStackTestMobilityModel>();
+        return tid;
+    }
+
+    /**
+     * Set the velocity in the local frame.
+     * @param velocity Velocity in meters per second.
+     */
+    void SetVelocity(const Vector& velocity)
+    {
+        m_helper.Update();
+        m_helper.SetVelocity(velocity);
+        m_helper.Unpause();
+        NotifyCourseChange();
+    }
+
+  private:
+    Vector DoGetPosition() const override
+    {
+        m_helper.Update();
+        return m_helper.GetCurrentPosition();
+    }
+
+    void DoSetPosition(const Vector& position) override
+    {
+        m_helper.SetPosition(position);
+        NotifyCourseChange();
+    }
+
+    Vector DoGetVelocity() const override
+    {
+        return m_helper.GetVelocity();
+    }
+
+    Vector DoGetGeographicPosition() const override
+    {
+        return GeographicPositions::TopocentricToGeographicCoordinates(
+            DoGetPosition(),
+            GetCoordinateTranslationReferencePoint(),
+            GeographicPositions::SPHERE);
+    }
+
+    Vector DoGetGeocentricPosition() const override
+    {
+        const auto position = DoGetGeographicPosition();
+        return GeographicPositions::GeographicToCartesianCoordinates(position.x,
+                                                                     position.y,
+                                                                     position.z,
+                                                                     GeographicPositions::SPHERE);
+    }
+
+    mutable ConstantVelocityHelper m_helper; ///< Position and velocity in the local frame.
+};
 
 std::string
 ReadFile(const std::string& p)
@@ -112,8 +182,8 @@ struct LeoRig
     explicit LeoRig(uint32_t numUes = 1)
     {
         sat.Create(1);
-        Ptr<ConstantVelocityMobilityModel> satMob =
-            CreateObject<ConstantVelocityMobilityModel>();
+        Ptr<RealStackTestMobilityModel> satMob =
+            CreateObject<RealStackTestMobilityModel>();
         satMob->SetPosition(Vector(0.0, 0.0, 600e3));
         satMob->SetVelocity(Vector(7560.0, 0.0, 0.0)); // LEO-600 orbital speed
         sat.Get(0)->AggregateObject(satMob);
@@ -121,8 +191,8 @@ struct LeoRig
         ue.Create(numUes);
         for (uint32_t i = 0; i < numUes; ++i)
         {
-            Ptr<ConstantPositionMobilityModel> ueMob =
-                CreateObject<ConstantPositionMobilityModel>();
+            Ptr<RealStackTestMobilityModel> ueMob =
+                CreateObject<RealStackTestMobilityModel>();
             ueMob->SetPosition(Vector(100.0 * i, 0.0, 0.0));
             ue.Get(i)->AggregateObject(ueMob);
         }
@@ -812,11 +882,11 @@ class SatBeamGainAngleDependenceTest : public TestCase
         // satellite 600 km up, displaced 600 km * tan(theta_3dB/2) along track.
         const double altM = 600e3;
         const double alongM = altM * std::tan(halfBwDeg * M_PI / 180.0);
-        Ptr<ConstantPositionMobilityModel> satMob =
-            CreateObject<ConstantPositionMobilityModel>();
+        Ptr<RealStackTestMobilityModel> satMob =
+            CreateObject<RealStackTestMobilityModel>();
         satMob->SetPosition(Vector(alongM, 0.0, altM));
-        Ptr<ConstantPositionMobilityModel> ueMob =
-            CreateObject<ConstantPositionMobilityModel>();
+        Ptr<RealStackTestMobilityModel> ueMob =
+            CreateObject<RealStackTestMobilityModel>();
         ueMob->SetPosition(Vector(0.0, 0.0, 0.0));
 
         // Tracking beam (the default, and what the TR 38.821 calibration runs):
@@ -940,7 +1010,7 @@ class RealStackX2DelayAppliedTest : public TestCase
         LeoRig rig;
         // A second gNB, offset along-track, so a real inter-satellite pair exists.
         rig.sat.Create(1);
-        Ptr<ConstantVelocityMobilityModel> sat2 = CreateObject<ConstantVelocityMobilityModel>();
+        Ptr<RealStackTestMobilityModel> sat2 = CreateObject<RealStackTestMobilityModel>();
         sat2->SetPosition(Vector(1500e3, 0.0, 600e3));
         sat2->SetVelocity(Vector(7560.0, 0.0, 0.0));
         rig.sat.Get(1)->AggregateObject(sat2);
@@ -998,14 +1068,14 @@ class RealStackNeighbourRsrpTest : public TestCase
         sats.Create(2);
         for (uint32_t i = 0; i < 2; ++i)
         {
-            auto m = CreateObject<ConstantVelocityMobilityModel>();
+            auto m = CreateObject<RealStackTestMobilityModel>();
             m->SetPosition(Vector(i == 0 ? 0.0 : -1500e3, 0.0, 780e3));
             m->SetVelocity(Vector(7460.0, 0.0, 0.0));
             sats.Get(i)->AggregateObject(m);
         }
         NodeContainer ues;
         ues.Create(1);
-        auto um = CreateObject<ConstantPositionMobilityModel>();
+        auto um = CreateObject<RealStackTestMobilityModel>();
         um->SetPosition(Vector(0.0, 0.0, 0.0));
         ues.Get(0)->AggregateObject(um);
 
@@ -1078,7 +1148,7 @@ class RealStackAirInterfaceDelayTest : public TestCase
         // fails while 350 and 500 pass. This test exists to keep the code path
         // alive at a geometry that works, not to claim LEO support.
         LeoRig rig(1);
-        rig.sat.Get(0)->GetObject<ConstantVelocityMobilityModel>()->SetPosition(
+        rig.sat.Get(0)->GetObject<RealStackTestMobilityModel>()->SetPosition(
             Vector(0.0, 0.0, 350e3));
         NtnRealStackHelper rs;
         rs.SetRadioBackend(NtnRealStackHelper::RadioBackend::Nr);
@@ -1164,12 +1234,12 @@ class RealStackRsrpPerResourceElementTest : public TestCase
     {
         NodeContainer sats;
         sats.Create(1);
-        auto sm = CreateObject<ConstantPositionMobilityModel>();
+        auto sm = CreateObject<RealStackTestMobilityModel>();
         sm->SetPosition(Vector(0.0, 0.0, 780e3));
         sats.Get(0)->AggregateObject(sm);
         NodeContainer ues;
         ues.Create(1);
-        auto um = CreateObject<ConstantPositionMobilityModel>();
+        auto um = CreateObject<RealStackTestMobilityModel>();
         um->SetPosition(Vector(0.0, 0.0, 0.0));
         ues.Get(0)->AggregateObject(um);
 
@@ -1249,12 +1319,12 @@ class RealStackReproManifestTest : public TestCase
 
         NodeContainer sats;
         sats.Create(1);
-        auto sm = CreateObject<ConstantPositionMobilityModel>();
+        auto sm = CreateObject<RealStackTestMobilityModel>();
         sm->SetPosition(Vector(0.0, 0.0, 780e3));
         sats.Get(0)->AggregateObject(sm);
         NodeContainer ues;
         ues.Create(1);
-        auto um = CreateObject<ConstantPositionMobilityModel>();
+        auto um = CreateObject<RealStackTestMobilityModel>();
         um->SetPosition(Vector(0.0, 0.0, 0.0));
         ues.Get(0)->AggregateObject(um);
 
@@ -1288,7 +1358,12 @@ class RealStackReproManifestTest : public TestCase
         // Build provenance must be real. An empty SHA is the exact failure this
         // guards: it is what every shipped manifest carried.
         const bool shaBlank = (body.find("\"toolkit_git_sha\": \"\"") != std::string::npos);
-        const bool haveNs3Version = (body.find("ns-3.") != std::string::npos);
+        std::ifstream versionFile(std::string(PROJECT_SOURCE_PATH) + "/VERSION");
+        std::string ns3Version;
+        std::getline(versionFile, ns3Version);
+        const bool haveNs3Version =
+            !ns3Version.empty() &&
+            body.find("\"ns3_version\": \"ns-" + ns3Version + "\"") != std::string::npos;
         const bool haveEpoch = (body.find("2026-01-01T00:00:00Z") != std::string::npos);
         const bool haveNorad = (body.find("44713") != std::string::npos);
         const bool haveName = (body.find("manifest-probe") != std::string::npos);
@@ -1366,13 +1441,13 @@ class RealStackBackhaulFoldTracksTest : public TestCase
         // clearly measurable amount inside the run.
         NodeContainer sats;
         sats.Create(1);
-        auto sm = CreateObject<ConstantVelocityMobilityModel>();
+        auto sm = CreateObject<RealStackTestMobilityModel>();
         sm->SetPosition(Vector(0.0, 0.0, 780e3));
         sm->SetVelocity(Vector(7460.0, 0.0, 0.0));
         sats.Get(0)->AggregateObject(sm);
         NodeContainer ues;
         ues.Create(1);
-        auto um = CreateObject<ConstantPositionMobilityModel>();
+        auto um = CreateObject<RealStackTestMobilityModel>();
         um->SetPosition(Vector(0.0, 0.0, 0.0));
         ues.Get(0)->AggregateObject(um);
 
@@ -1439,12 +1514,12 @@ class RealStackNtnBandConformanceTest : public TestCase
     {
         NodeContainer sats;
         sats.Create(1);
-        auto sm = CreateObject<ConstantPositionMobilityModel>();
+        auto sm = CreateObject<RealStackTestMobilityModel>();
         sm->SetPosition(Vector(0.0, 0.0, 780e3));
         sats.Get(0)->AggregateObject(sm);
         NodeContainer ues;
         ues.Create(1);
-        auto um = CreateObject<ConstantPositionMobilityModel>();
+        auto um = CreateObject<RealStackTestMobilityModel>();
         um->SetPosition(Vector(0.0, 0.0, 0.0));
         ues.Get(0)->AggregateObject(um);
 
@@ -1573,12 +1648,12 @@ class RealStackHealthGatesCanFailTest : public TestCase
     {
         NodeContainer sats;
         sats.Create(1);
-        auto sm = CreateObject<ConstantPositionMobilityModel>();
+        auto sm = CreateObject<RealStackTestMobilityModel>();
         sm->SetPosition(Vector(0.0, 0.0, 780e3));
         sats.Get(0)->AggregateObject(sm);
         NodeContainer ues;
         ues.Create(1);
-        auto um = CreateObject<ConstantPositionMobilityModel>();
+        auto um = CreateObject<RealStackTestMobilityModel>();
         um->SetPosition(Vector(0.0, 0.0, 0.0));
         ues.Get(0)->AggregateObject(um);
 
@@ -1674,13 +1749,13 @@ class RealStackChannelUpdatePeriodTest : public TestCase
     {
         NodeContainer sats;
         sats.Create(1);
-        auto sm = CreateObject<ConstantVelocityMobilityModel>();
+        auto sm = CreateObject<RealStackTestMobilityModel>();
         sm->SetPosition(Vector(0.0, 0.0, 780e3));
         sm->SetVelocity(Vector(7460.0, 0.0, 0.0));
         sats.Get(0)->AggregateObject(sm);
         NodeContainer ues;
         ues.Create(1);
-        auto um = CreateObject<ConstantPositionMobilityModel>();
+        auto um = CreateObject<RealStackTestMobilityModel>();
         um->SetPosition(Vector(0.0, 0.0, 0.0));
         ues.Get(0)->AggregateObject(um);
 
@@ -1793,12 +1868,12 @@ class RealStackIndependentBudgetOracleTest : public TestCase
         {
             NodeContainer sats;
             sats.Create(1);
-            auto sm = CreateObject<ConstantPositionMobilityModel>();
+            auto sm = CreateObject<RealStackTestMobilityModel>();
             sm->SetPosition(Vector(0.0, 0.0, altKm * 1e3));
             sats.Get(0)->AggregateObject(sm);
             NodeContainer ues;
             ues.Create(1);
-            auto um = CreateObject<ConstantPositionMobilityModel>();
+            auto um = CreateObject<RealStackTestMobilityModel>();
             um->SetPosition(Vector(0.0, 0.0, 0.0));
             ues.Get(0)->AggregateObject(um);
 
@@ -1881,12 +1956,12 @@ class RealStackStrictGatesReachableTest : public TestCase
     {
         NodeContainer sats;
         sats.Create(1);
-        auto sm = CreateObject<ConstantPositionMobilityModel>();
+        auto sm = CreateObject<RealStackTestMobilityModel>();
         sm->SetPosition(Vector(0.0, 0.0, 780e3));
         sats.Get(0)->AggregateObject(sm);
         NodeContainer ues;
         ues.Create(1);
-        auto um = CreateObject<ConstantPositionMobilityModel>();
+        auto um = CreateObject<RealStackTestMobilityModel>();
         um->SetPosition(Vector(0.0, 0.0, 0.0));
         ues.Get(0)->AggregateObject(um);
 
@@ -2551,7 +2626,7 @@ class MultiGnbMeasuredPlaneTest : public TestCase
         sat.Create(kGnbs);
         for (uint32_t i = 0; i < kGnbs; ++i)
         {
-            Ptr<ConstantVelocityMobilityModel> m = CreateObject<ConstantVelocityMobilityModel>();
+            Ptr<RealStackTestMobilityModel> m = CreateObject<RealStackTestMobilityModel>();
             m->SetPosition(Vector(i * 400e3, 0.0, 600e3));
             m->SetVelocity(Vector(7560.0, 0.0, 0.0));
             sat.Get(i)->AggregateObject(m);
@@ -2560,7 +2635,7 @@ class MultiGnbMeasuredPlaneTest : public TestCase
         ue.Create(2);
         for (uint32_t i = 0; i < 2; ++i)
         {
-            Ptr<ConstantPositionMobilityModel> m = CreateObject<ConstantPositionMobilityModel>();
+            Ptr<RealStackTestMobilityModel> m = CreateObject<RealStackTestMobilityModel>();
             m->SetPosition(Vector(i * 1000.0, 0.0, 0.0));
             ue.Get(i)->AggregateObject(m);
         }
@@ -2630,12 +2705,12 @@ class NtnChannelExtrasReachTheChainTest : public TestCase
     static void BuildStack(NtnRealStackHelper& rs, NodeContainer& sat, NodeContainer& ue)
     {
         sat.Create(1);
-        Ptr<ConstantVelocityMobilityModel> sm = CreateObject<ConstantVelocityMobilityModel>();
+        Ptr<RealStackTestMobilityModel> sm = CreateObject<RealStackTestMobilityModel>();
         sm->SetPosition(Vector(0.0, 0.0, 600e3));
         sm->SetVelocity(Vector(7560.0, 0.0, 0.0));
         sat.Get(0)->AggregateObject(sm);
         ue.Create(1);
-        Ptr<ConstantPositionMobilityModel> um = CreateObject<ConstantPositionMobilityModel>();
+        Ptr<RealStackTestMobilityModel> um = CreateObject<RealStackTestMobilityModel>();
         um->SetPosition(Vector(0.0, 0.0, 0.0));
         ue.Get(0)->AggregateObject(um);
         rs.SetSimTime(Seconds(1.0));
@@ -2678,8 +2753,8 @@ class NtnChannelExtrasReachTheChainTest : public TestCase
             NtnRealStackHelper rs;
             NodeContainer sat, ue;
             BuildStack(rs, sat, ue);
-            Ptr<ConstantPositionMobilityModel> beamCenter =
-                CreateObject<ConstantPositionMobilityModel>();
+            Ptr<RealStackTestMobilityModel> beamCenter =
+                CreateObject<RealStackTestMobilityModel>();
             beamCenter->SetPosition(Vector(300e3, 0.0, 0.0)); // fixed, off the UE
             rs.SetSatelliteBeam(4.4127, beamCenter);
             rs.Build(sat, ue);
@@ -2743,13 +2818,13 @@ class NtnScenarioReachesTheModelTest : public TestCase
         // And the helper must carry the selection into the chained model.
         NodeContainer sat;
         sat.Create(1);
-        Ptr<ConstantVelocityMobilityModel> sm = CreateObject<ConstantVelocityMobilityModel>();
+        Ptr<RealStackTestMobilityModel> sm = CreateObject<RealStackTestMobilityModel>();
         sm->SetPosition(Vector(0.0, 0.0, 600e3));
         sm->SetVelocity(Vector(7560.0, 0.0, 0.0));
         sat.Get(0)->AggregateObject(sm);
         NodeContainer ue;
         ue.Create(1);
-        Ptr<ConstantPositionMobilityModel> um = CreateObject<ConstantPositionMobilityModel>();
+        Ptr<RealStackTestMobilityModel> um = CreateObject<RealStackTestMobilityModel>();
         um->SetPosition(Vector(0.0, 0.0, 0.0));
         ue.Get(0)->AggregateObject(um);
 
@@ -2896,9 +2971,9 @@ class Tr38811ShadowFadingIsCorrelatedTest : public TestCase
         m->SetScenario(Ntn38811ExcessLossModel::DenseUrban); // largest sigma
         m->AssignStreams(7);
 
-        Ptr<ConstantPositionMobilityModel> ue = CreateObject<ConstantPositionMobilityModel>();
+        Ptr<RealStackTestMobilityModel> ue = CreateObject<RealStackTestMobilityModel>();
         ue->SetPosition(Vector(0.0, 0.0, 0.0));
-        Ptr<ConstantPositionMobilityModel> sat = CreateObject<ConstantPositionMobilityModel>();
+        Ptr<RealStackTestMobilityModel> sat = CreateObject<RealStackTestMobilityModel>();
 
         std::vector<double> out;
         out.reserve(n);
@@ -2990,9 +3065,9 @@ class Tr38811ShadowFadingIsCorrelatedTest : public TestCase
             mi->SetScenario(Ntn38811ExcessLossModel::DenseUrban);
             mi->SetAttribute("EnableScintillation", BooleanValue(false)); // isolate the SF term
             mi->AssignStreams(1000 + 4 * i);
-            Ptr<ConstantPositionMobilityModel> u = CreateObject<ConstantPositionMobilityModel>();
+            Ptr<RealStackTestMobilityModel> u = CreateObject<RealStackTestMobilityModel>();
             u->SetPosition(Vector(0.0, 0.0, 0.0));
-            Ptr<ConstantPositionMobilityModel> sv = CreateObject<ConstantPositionMobilityModel>();
+            Ptr<RealStackTestMobilityModel> sv = CreateObject<RealStackTestMobilityModel>();
             sv->SetPosition(Vector(d * std::cos(e), 0.0, d * std::sin(e)));
             const double v = mi->CalcRxPower(0.0, sv, u);
             sum += v;
@@ -3027,8 +3102,8 @@ class Tr38811ShadowFadingIsCorrelatedTest : public TestCase
         // Translate BOTH ends together so the elevation, and therefore the
         // table sigma, is constant while the ground displacement accumulates.
         // Elevation-driven decorrelation would otherwise change sigma under us.
-        Ptr<ConstantPositionMobilityModel> wu = CreateObject<ConstantPositionMobilityModel>();
-        Ptr<ConstantPositionMobilityModel> ws = CreateObject<ConstantPositionMobilityModel>();
+        Ptr<RealStackTestMobilityModel> wu = CreateObject<RealStackTestMobilityModel>();
+        Ptr<RealStackTestMobilityModel> ws = CreateObject<RealStackTestMobilityModel>();
         const uint32_t kBurn = 2000;
         const uint32_t kWalk = 200000;
         double s1 = 0.0;
@@ -3077,12 +3152,12 @@ class FeederLinkDelayFollowsGeometryTest : public TestCase
     {
         NodeContainer sat;
         sat.Create(1);
-        Ptr<ConstantPositionMobilityModel> sm = CreateObject<ConstantPositionMobilityModel>();
+        Ptr<RealStackTestMobilityModel> sm = CreateObject<RealStackTestMobilityModel>();
         sm->SetPosition(Vector(0.0, 0.0, 600e3));
         sat.Get(0)->AggregateObject(sm);
         NodeContainer ue;
         ue.Create(1);
-        Ptr<ConstantPositionMobilityModel> um = CreateObject<ConstantPositionMobilityModel>();
+        Ptr<RealStackTestMobilityModel> um = CreateObject<RealStackTestMobilityModel>();
         um->SetPosition(Vector(0.0, 0.0, 0.0));
         ue.Get(0)->AggregateObject(um);
 
@@ -3096,7 +3171,7 @@ class FeederLinkDelayFollowsGeometryTest : public TestCase
                               "with no feeder geometry the delay must be exactly zero so the "
                               "absence is visible");
 
-        Ptr<ConstantPositionMobilityModel> gw = CreateObject<ConstantPositionMobilityModel>();
+        Ptr<RealStackTestMobilityModel> gw = CreateObject<RealStackTestMobilityModel>();
         gw->SetPosition(Vector(500.0e3, 0.0, 0.0));
         rs.SetFeederGeometry(sm, gw);
 
@@ -3173,13 +3248,13 @@ class ServiceLinkDelayTreatmentIsDeclaredTest : public TestCase
         const std::string dir = "test-cvc07-delay-treatment";
         NodeContainer sat;
         sat.Create(1);
-        Ptr<ConstantVelocityMobilityModel> sm = CreateObject<ConstantVelocityMobilityModel>();
+        Ptr<RealStackTestMobilityModel> sm = CreateObject<RealStackTestMobilityModel>();
         sm->SetPosition(Vector(0.0, 0.0, 600e3));
         sm->SetVelocity(Vector(7560.0, 0.0, 0.0));
         sat.Get(0)->AggregateObject(sm);
         NodeContainer ue;
         ue.Create(1);
-        Ptr<ConstantPositionMobilityModel> um = CreateObject<ConstantPositionMobilityModel>();
+        Ptr<RealStackTestMobilityModel> um = CreateObject<RealStackTestMobilityModel>();
         um->SetPosition(Vector(0.0, 0.0, 0.0));
         ue.Get(0)->AggregateObject(um);
 
@@ -3251,13 +3326,13 @@ class NtnExtremaNotSamplesTest : public TestCase
         sat.Create(altsM.size());
         for (size_t i = 0; i < altsM.size(); ++i)
         {
-            Ptr<ConstantVelocityMobilityModel> m = CreateObject<ConstantVelocityMobilityModel>();
+            Ptr<RealStackTestMobilityModel> m = CreateObject<RealStackTestMobilityModel>();
             m->SetPosition(Vector(0.0, 0.0, altsM[i]));
             m->SetVelocity(Vector(7560.0, 0.0, 0.0));
             sat.Get(i)->AggregateObject(m);
         }
         ue.Create(1);
-        Ptr<ConstantPositionMobilityModel> um = CreateObject<ConstantPositionMobilityModel>();
+        Ptr<RealStackTestMobilityModel> um = CreateObject<RealStackTestMobilityModel>();
         um->SetPosition(Vector(0.0, 0.0, 0.0));
         ue.Get(0)->AggregateObject(um);
         rs.SetSimTime(Seconds(1.0));
@@ -3357,13 +3432,13 @@ class ThroughputUsesEmissionWindowTest : public TestCase
     {
         NodeContainer sat;
         sat.Create(1);
-        Ptr<ConstantVelocityMobilityModel> sm = CreateObject<ConstantVelocityMobilityModel>();
+        Ptr<RealStackTestMobilityModel> sm = CreateObject<RealStackTestMobilityModel>();
         sm->SetPosition(Vector(0.0, 0.0, 600e3));
         sm->SetVelocity(Vector(7560.0, 0.0, 0.0));
         sat.Get(0)->AggregateObject(sm);
         NodeContainer ue;
         ue.Create(1);
-        Ptr<ConstantPositionMobilityModel> um = CreateObject<ConstantPositionMobilityModel>();
+        Ptr<RealStackTestMobilityModel> um = CreateObject<RealStackTestMobilityModel>();
         um->SetPosition(Vector(0.0, 0.0, 0.0));
         ue.Get(0)->AggregateObject(um);
 
@@ -3448,13 +3523,13 @@ class NtnTimerRelaxationReachesNrTest : public TestCase
         // relaxed timer must exceed its terrestrial default.
         NodeContainer sat;
         sat.Create(1);
-        Ptr<ConstantVelocityMobilityModel> sm = CreateObject<ConstantVelocityMobilityModel>();
+        Ptr<RealStackTestMobilityModel> sm = CreateObject<RealStackTestMobilityModel>();
         sm->SetPosition(Vector(0.0, 0.0, 1200e3));
         sm->SetVelocity(Vector(7560.0, 0.0, 0.0));
         sat.Get(0)->AggregateObject(sm);
         NodeContainer ue;
         ue.Create(1);
-        Ptr<ConstantPositionMobilityModel> um = CreateObject<ConstantPositionMobilityModel>();
+        Ptr<RealStackTestMobilityModel> um = CreateObject<RealStackTestMobilityModel>();
         um->SetPosition(Vector(0.0, 0.0, 0.0));
         ue.Get(0)->AggregateObject(um);
 

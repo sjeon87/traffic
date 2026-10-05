@@ -656,31 +656,9 @@ NtnRealStackHelper::BuildNrRadio()
     // BandwidthPartInfo in this 5G-LENA carries only a private SpectrumChannel
     // (SetChannel/GetChannel) and AssignChannelsToBands fills it, so the Friis
     // instances below are chained onto each assigned channel afterwards.
-    // A9. SRS configuration indices, not spectrum, are what caps how many UEs a
-    // gNB can admit. NrGnbRrc::SrsPeriodicity defaults to 40 and the toolkit
-    // never set it, so DoAllocateTemporaryCellRnti started returning 0 once the
-    // indices ran out. That refusal is not honoured downstream: the MAC still
-    // builds a RAR, several refused UEs collide on RNTI 0 in m_rapIdRntiMap, and
-    // a UE then receives two RARs matching its own preamble in one message. The
-    // second arrives at NrUeRrc in IDLE_CONNECTING, where
-    // DoNotifyRandomAccessSuccessful has no case for it and calls
-    // NS_FATAL_ERROR. Measured: fine at 16 UEs, aborts at 30, with the probe
-    // showing IMSI 22 processing preamble 40 twice at the same instant, both
-    // times with rnti=0 while its peers held 32 to 40.
-    //
-    // Size the periodicity to the run instead of leaving the default. The
-    // allowed set is {2, 5, 10, 20, 40, 80, 160, 320} and only part of each
-    // period is usable as indices, so the headroom below is measured rather than
-    // assumed: 40 could not carry 30 UEs.
+    // Reserve SRS offsets with headroom for the attached UEs.
     {
         static const uint32_t kAllowed[] = {2, 5, 10, 20, 40, 80, 160, 320};
-        // Never go BELOW NrGnbRrc's own default of 40. A first version of this
-        // picked the smallest allowed value that fit, which for the three- and
-        // four-UE scenarios most examples default to chose 10 or 20 instead. A
-        // shorter SRS period means SRS is sent more often, so that would have
-        // changed uplink behaviour, and every measured result that depends on
-        // it, across scenarios that never had a capacity problem. This may only
-        // add capacity, never alter a run that was already fine.
         static const uint32_t kDefaultPeriodicity = 40;
         const uint32_t needed = 2 * (m_ue.GetN() + 2);
         uint32_t srs = kAllowed[sizeof(kAllowed) / sizeof(kAllowed[0]) - 1];
@@ -693,7 +671,7 @@ NtnRealStackHelper::BuildNrRadio()
             }
         }
         srs = std::max(srs, kDefaultPeriodicity);
-        Config::SetDefault("ns3::NrGnbRrc::SrsPeriodicity", UintegerValue(srs));
+        Config::SetDefault("ns3::NrMacSchedulerSrsDefault::StartingPeriodicity", UintegerValue(srs));
         NS_LOG_INFO("SrsPeriodicity set to " << srs << " for " << m_ue.GetN() << " UEs");
     }
     if (!m_tddPattern.empty())
@@ -721,12 +699,12 @@ NtnRealStackHelper::BuildNrRadio()
         // all of them mis-scales Friis across a wide multi-BWP band.
         const double bwpFreqHz = (bwp->m_centralFrequency > 0.0) ? bwp->m_centralFrequency : m_freqHz;
         friis->SetAttribute("Frequency", DoubleValue(bwpFreqHz));
-        // Prepend ahead of the 3GPP NTN-Rural loss AssignChannelsToBands
-        // installed: SpectrumChannel::AddPropagationLossModel chains the new
-        // head before the existing model.
+        // Friis supplies the free-space term; AddExtraPropagationLoss appends
+        // the NTN excess losses. The NTN spectrum model supplies fading.
         Ptr<SpectrumChannel> bwpChannel = bwp->GetChannel();
         NS_ABORT_MSG_IF(!bwpChannel, "NrChannelHelper left BWP without a spectrum channel");
         bwpChannel->AddPropagationLossModel(friis);
+        friis->SetNext(nullptr);
         m_nrBaseLossPerBwp[cc] = friis;
         if (cc == 0)
         {
@@ -976,8 +954,7 @@ NtnRealStackHelper::BuildNrRadio()
             if (m_kOffsetConsumption)
             {
                 m_nr->GetGnbPhy(m_enbDevs.Get(i), b)
-                    ->SetAttribute("N2Delay",
-                                   UintegerValue(baseN2 + m_consumedKOffsetSlots));
+                    ->SetN2Delay(baseN2 + m_consumedKOffsetSlots);
             }
         }
     }
@@ -2019,7 +1996,7 @@ NtnRealStackHelper::SetBroadcastKOffsetSlots(uint32_t slots)
             for (uint8_t b = 0; b < nBwp; ++b)
             {
                 m_nr->GetGnbPhy(m_enbDevs.Get(i), b)
-                    ->SetAttribute("N2Delay", UintegerValue(m_baseN2Delay + slots));
+                    ->SetN2Delay(m_baseN2Delay + slots);
             }
         }
     });
