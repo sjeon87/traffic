@@ -22,7 +22,6 @@
 #include "ns3/basic-data-calculators.h"
 #include "ns3/config.h"
 #include "ns3/error-model.h"
-#include "ns3/integer.h"
 #include "ns3/internet-stack-helper.h"
 #include "ns3/ipv4-address-helper.h"
 #include "ns3/ipv6-address-helper.h"
@@ -41,11 +40,12 @@
 #include "ns3/three-gpp-http-header.h"
 #include "ns3/three-gpp-http-helper.h"
 #include "ns3/three-gpp-http-server.h"
+#include "ns3/uinteger.h"
 
 #include <list>
 #include <sstream>
 
-NS_LOG_COMPONENT_DEFINE("ThreeGppHttpClientServerTest");
+NS_LOG_COMPONENT_DEFINE("TrafficThreeGppHttpClientServerTest");
 
 namespace ns3
 {
@@ -85,7 +85,7 @@ class ThreeGppHttpObjectTestCase : public TestCase
      *                server. Otherwise, IPv4 will be used.
      */
     ThreeGppHttpObjectTestCase(const std::string& name,
-                               int64_t rngRun,
+                               uint32_t rngRun,
                                const TypeId& tcpType,
                                const Time& channelDelay,
                                double bitErrorRate,
@@ -263,7 +263,7 @@ class ThreeGppHttpObjectTestCase : public TestCase
 
     // THE PARAMETERS OF THE TEST CASE.
 
-    int64_t m_rngRun;    ///< Determines the set of random values generated.
+    uint32_t m_rngRun;   ///< Determines the set of random values generated.
     TypeId m_tcpType;    ///< TCP algorithm used.
     Time m_channelDelay; ///< %Time needed by a packet to propagate.
     uint32_t m_mtuSize;  ///< Maximum transmission unit (in bytes).
@@ -291,7 +291,7 @@ class ThreeGppHttpObjectTestCase : public TestCase
 }; // end of `class HttpClientServerTestCase`
 
 ThreeGppHttpObjectTestCase::ThreeGppHttpObjectTestCase(const std::string& name,
-                                                       int64_t rngRun,
+                                                       uint32_t rngRun,
                                                        const TypeId& tcpType,
                                                        const Time& channelDelay,
                                                        double bitErrorRate,
@@ -371,7 +371,7 @@ void
 ThreeGppHttpObjectTestCase::DoRun()
 {
     NS_LOG_FUNCTION(this << GetName());
-    Config::SetGlobal("RngRun", IntegerValue(m_rngRun));
+    Config::SetGlobal("RngRun", UintegerValue(m_rngRun));
     NS_LOG_INFO(this << " Running test case " << GetName());
 
     /*
@@ -794,7 +794,7 @@ class ThreeGppHttpClientServerTestSuite : public TestSuite
     ThreeGppHttpClientServerTestSuite()
         : TestSuite("three-gpp-http-client-server-test", Type::SYSTEM)
     {
-        // LogComponentEnable ("ThreeGppHttpClientServerTest", LOG_INFO);
+        // LogComponentEnable ("TrafficThreeGppHttpClientServerTest", LOG_INFO);
         // LogComponentEnable ("ThreeGppHttpClient", LOG_INFO);
         // LogComponentEnable ("ThreeGppHttpServer", LOG_INFO);
         // LogComponentEnableAll (LOG_PREFIX_ALL);
@@ -803,7 +803,7 @@ class ThreeGppHttpClientServerTestSuite : public TestSuite
         double bitErrorRate[] = {0.0, 5.0e-6};
         uint32_t mtuSize[] = {536, 1460};
 
-        int64_t run = 1;
+        uint32_t run = 1;
         while (run <= 100)
         {
             for (uint32_t i1 = 0; i1 < 3; i1++)
@@ -844,7 +844,7 @@ class ThreeGppHttpClientServerTestSuite : public TestSuite
      * @param useIpv6 If true, IPv6 will be used to address both client and
      *                server. Otherwise, IPv4 will be used.
      */
-    void AddHttpObjectTestCase(int64_t rngRun,
+    void AddHttpObjectTestCase(uint32_t rngRun,
                                const Time& channelDelay,
                                double bitErrorRate,
                                uint32_t mtuSize,
