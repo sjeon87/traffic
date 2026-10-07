@@ -67,6 +67,7 @@ set(test_sources
     test/nrtv-test.cc
     test/ntn-real-stack-helper-test.cc
     test/ntn-spectrum-seam-test.cc
+    test/three-gpp-http-client-server-test.cc
 )
 
 build_lib(
